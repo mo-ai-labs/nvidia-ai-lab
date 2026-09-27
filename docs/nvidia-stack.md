@@ -20,7 +20,7 @@
   - [Change log](#change-log)
 
 > **Week 1 · Day 2** · Deliverable for `nvidia-ai-plan/week-01/day-02`
-> Status: **draft** · Last updated: **2026-09-22** · Revisit: end of Week 8 (v2, after every layer is hands-on)
+> Status: **draft** · Last updated: **2026-09-27** · Revisit: end of Week 8 (v2, after every layer is hands-on)
 
 **Purpose.** Place every framework: what it solves, what it sits on, when to use it, and — most important — **when not to**.
 This is the reference I'll use to answer: *"Given a business requirement, choose the appropriate technology and explain why."*
@@ -36,46 +36,101 @@ This is the reference I'll use to answer: *"Given a business requirement, choose
 
 ## 1. Stack diagram v1
 
-Layers go bottom (hardware) → top (applications). Draw arrows as **"depends on / compiles to"**.
+Layers go bottom (hardware) → top (applications). Arrows read **"depends on / runs on"**.
+Solid arrow = hard dependency · dashed arrow = optional / pluggable backend · dashed grey box = non-NVIDIA alternative at that layer.
 
 ```mermaid
-flowchart BT
-    subgraph L0["L0 · Hardware"]
-        HW["NVIDIA GPU (Ampere / Ada / Hopper / Blackwell)"]
-    end
-    subgraph L1["L1 · Programming model"]
-        CUDA["CUDA"]
-    end
-    subgraph L2["L2 · Libraries (CUDA-X)"]
-        CUDAX["cuBLAS · cuDNN · NCCL · …"]
-    end
-    subgraph L3["L3 · Optimization / compilation"]
-        TensorRT[TensorRT, TensorRT-LLM]
-    end
-    subgraph L4["L4 · Serving / runtime"]
-        Triton[Triton, Dynamo  (+ non-NVIDIA: vLLM, SGLang, TGI, llama.cpp, Ollama)]
-    end
-    subgraph L5["L5 · Packaged microservices"]
-        NIM
+flowchart TB
+    subgraph L7["L7 · Applications"]
+        APP["FinCrime use cases<br/>fraud scoring · AML triage · investigator agents"]
     end
     subgraph L6["L6 · Frameworks (train / data / agents)"]
-        NeMo[Nemo, NeMo Agent Toolkit, RAPIDS, Morpheus]
+        NEMO["NeMo<br/>train · fine-tune · guardrails · eval"]
+        NAT["NeMo Agent Toolkit<br/>agent profiling · eval · observability"]
+        RAPIDS["RAPIDS<br/>cuDF · cuML · cuGraph"]
+        MORPHEUS["Morpheus<br/>streaming security / fraud pipelines"]
+        ALT6["ADK · LangGraph · HF TRL/PEFT<br/>pandas · Polars · Flink"]:::alt
     end
-    subgraph L7["L7 · Applications"]
-        APP["FinCrime use cases: fraud scoring, AML triage, investigator agents"]
+    subgraph L5["L5 · Packaged microservices"]
+        NIM["NIM<br/>OpenAI-compatible model container"]
+        ALT5["Ollama · hosted APIs<br/>Bedrock · Vertex · Azure OpenAI"]:::alt
+    end
+    subgraph L4["L4 · Serving / orchestration"]
+        TRITON["Triton Inference Server<br/>multi-model · multi-backend"]
+        DYNAMO["Dynamo<br/>distributed LLM serving<br/>disagg. prefill/decode · KV-aware routing"]
+        ALT4["TGI · KServe · Ray Serve"]:::alt
+    end
+    subgraph L3["L3 · Engines / optimization / compilation"]
+        TRT["TensorRT<br/>AOT inference compiler"]
+        TRTLLM["TensorRT-LLM<br/>LLM engine + runtime"]
+        PT["PyTorch + Megatron-Core"]:::alt
+        ALT3["vLLM · SGLang · llama.cpp"]:::alt
+    end
+    subgraph L2["L2 · Libraries (CUDA-X)"]
+        CUDAX["cuBLAS · cuDNN · NCCL · CUTLASS · …"]
+    end
+    subgraph L1["L1 · Programming model"]
+        CUDA["CUDA toolkit + runtime"]
+    end
+    subgraph L0["L0 · Hardware"]
+        HW["NVIDIA GPU + driver<br/>Ampere · Ada · Hopper · Blackwell"]
     end
 
+    %% L1-L2: foundation
     CUDA --> HW
     CUDAX --> CUDA
-    TensorRT --> CUDA
-    %% TODO: add the remaining edges yourself — that's the exercise
+
+    %% L3: engines
+    TRT --> CUDAX
+    TRTLLM --> TRT
+    TRTLLM --> CUDAX
+    PT --> CUDAX
+    ALT3 --> CUDAX
+
+    %% L4: serving
+    TRITON -->|backend| TRT
+    TRITON -->|backend| TRTLLM
+    TRITON -.->|backend| PT
+    TRITON -.->|vLLM backend| ALT3
+    DYNAMO -->|engine| TRTLLM
+    DYNAMO -.->|engine| ALT3
+    ALT4 --> ALT3
+
+    %% L5: packaging
+    NIM -->|engine inside| TRTLLM
+    NIM -.->|engine inside| ALT3
+    NIM -.-> TRITON
+
+    %% L6: frameworks
+    NEMO --> PT
+    NEMO -.->|export / deploy| TRTLLM
+    NEMO -.->|deploy| NIM
+    NAT -.->|any OpenAI-compatible LLM| NIM
+    RAPIDS --> CUDAX
+    MORPHEUS --> RAPIDS
+    MORPHEUS --> TRITON
+
+    %% L7: applications
+    APP --> MORPHEUS
+    APP --> RAPIDS
+    APP --> NAT
+    APP --> NIM
+
+    classDef alt fill:#f4f4f4,stroke:#999,stroke-dasharray:5 4,color:#555
 ```
-
-
 
 **Diagram notes** (anything the boxes can't show — e.g. things that sit on *two* layers, optional dependencies):
 
-- …
+- **Edge direction** — every arrow points from the thing to what it needs. Following arrows down from any box gives its full dependency chain (e.g. Morpheus → Triton → TensorRT → CUDA-X → CUDA → GPU).
+- **TensorRT-LLM straddles L3/L4** — it's an engine, but it also ships its own runtime and an OpenAI-compatible server (`trtllm-serve`), so it can serve on its own without Triton or Dynamo.
+- **Triton vs Dynamo sit side by side, not stacked** — Triton serves *any* model type (TensorRT, ONNX, PyTorch, FIL/XGBoost, Python); Dynamo is LLM-only and orchestrates engines (TRT-LLM, vLLM, SGLang) across nodes. Dynamo does **not** require Triton.
+- **Dynamo is the only NVIDIA box that points at non-NVIDIA engines as first-class** — via vLLM/SGLang it also runs on AMD / Intel hardware, which is why its "depends on" is really "an engine", not "a GPU".
+- **NIM is packaging, not a new engine** — inside a NIM container is one of TRT-LLM or vLLM (chosen per model/GPU profile). The dashed edge to Triton marks that some NIMs are built on it.
+- **NeMo spans two layers** — training/fine-tuning sits on PyTorch + Megatron-Core (L3), while its outputs are deployed through TRT-LLM / NIM. NeMo Guardrails can sit in front of *any* endpoint at runtime.
+- **NeMo Agent Toolkit needs no GPU** — it only needs an LLM endpoint (NIM is optional; OpenAI, Bedrock, etc. work too). This is where my Google ADK platform plugs in (`nat.plugins.adk`).
+- **RAPIDS is technically part of CUDA-X** — drawn at L6 because I use it as a framework, but it skips L3–L5 entirely and talks straight to CUDA-X.
+- **Morpheus is a composer** — it has no layer of its own below; it stitches RAPIDS (feature engineering) + Triton (inference) into a streaming pipeline, fed by Kafka (not drawn).
+- **Grey dashed boxes = the when-not escape hatch** for each layer — the non-NVIDIA option I'd pick when the NVIDIA box is overkill.
 
 ---
 
@@ -400,5 +455,6 @@ One line per cell. Detail goes in §3.
 | Date       | Version | What changed          |
 | ---------- | ------- | --------------------- |
 | 2026-09-22 | v1      | Initial map (Wk 1 D2) |
+| 2026-09-27 | v1.1    | Completed stack diagram: all dependency edges, non-NVIDIA alternatives per layer, diagram notes |
 
 
