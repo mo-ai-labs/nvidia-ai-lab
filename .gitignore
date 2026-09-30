@@ -1,0 +1,20 @@
+# Secrets: never commit. Use .env.example files for the shape.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# Node
+node_modules/
+
+# Benchmark scratch
+01-cuda/matmul-bench/results/smoke_*
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,15 @@
+{
+  "torch": "2.14.0+cu130",
+  "onnxruntime": "1.25.0",
+  "opset": 18,
+  "rtol": 0.0001,
+  "atol": 1e-05,
+  "max_abs_diff_by_batch": {
+    "1": 9.5367431640625e-07,
+    "7": 4.76837158203125e-07,
+    "256": 1.430511474609375e-06
+  },
+  "val_acc": 0.8503,
+  "majority_baseline_acc": 0.7194,
+  "dynamic_axis": "batch"
+}

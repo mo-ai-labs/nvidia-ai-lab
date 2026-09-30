@@ -1,0 +1,13 @@
+[project]
+name = "matmul-bench"
+version = "0.1.0"
+description = "Week 1 Day 4 - CPU vs GPU matmul sweep"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.4",
+    "numpy",
+    "matplotlib>=3.8",
+]
+
+[tool.uv]
+package = false
