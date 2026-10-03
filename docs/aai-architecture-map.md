@@ -111,3 +111,9 @@ A: GH-600's ladder (suggest → draft PR → PR with checks → auto-merge) maps
 - ADK's `Agent` is an alias for `LlmAgent`: moving off `Sequential/Parallel/LoopAgent` turned our workflows into agents (the LLM now owns control flow everywhere).
 - top_p is probability mass, not a percentage of tokens; temperature changes gaps, never ranking.
 - The checkpointer + `thread_id` is the shared foundation for both scaling (stateless workers) and human approval (`interrupt()`).
+
+## Reflection
+
+- **Closest GH-600 ↔ runtime twin**: *Draft PR ↔ `interrupt()`*: in both, the work is done but waits for a human before it takes effect.
+- **No twin**: *rung 3, act and report*: runtime agents have it (act freely, human reviews the log after); GH-600's ladder jumps from PR-with-checks straight to auto-merge.
+- **Day-one rung for an AML agent at my bank: 1, Suggest.** Why: (1) no validation history yet: model risk needs performance evidence before granting any autonomy; (2) regulatory accountability: dispositions and SARs must be owned by a named human; (3) earn trust, then climb: run alongside analysts, measure, and promote action-by-action up the ladder.
